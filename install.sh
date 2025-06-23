@@ -202,7 +202,12 @@ install_x-ui() {
     systemctl daemon-reload
     systemctl enable x-ui
     systemctl start x-ui
-    echo -e "${green}x-ui v${last_version}${plain} 安装完成，面板已启动，"
+    
+    # 启用开机自启
+    echo -e "${yellow}正在设置 x-ui 开机自启...${plain}"
+    x-ui enable
+    
+    echo -e "${green}x-ui v${last_version}${plain} 安装完成，面板已启动，并已设置开机自启"
     echo -e ""
     echo -e "x-ui 管理脚本使用方法: "
     echo -e "----------------------------------------------"
