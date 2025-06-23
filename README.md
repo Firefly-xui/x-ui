@@ -103,19 +103,17 @@ xray 状态: 运行
 
 # ubuntu安装x-ui，创建节点，并优化网络
 
-更新
+ 
+跟新以及安装防火墙放行端口
 ```
-sudo apt update
-```    
+sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt update && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt install -y ufw && echo "y" | sudo ufw enable && sudo ufw allow 22/tcp && sudo ufw allow 5000/tcp && sudo ufw allow 7000/tcp && sudo ufw status
 
-安装防火墙放行端口
-```
-sudo apt update && sudo apt install -y ufw && sudo ufw enable && sudo ufw allow 22/tcp && sudo ufw allow 5000/tcp && sudo ufw allow 7000/tcp && sudo ufw status
 ```  
 
 安装x-ui面板
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/Firefly-xui/x-ui/master/install.sh)
+curl -Ls https://raw.githubusercontent.com/Firefly-xui/x-ui/master/install.sh -o install.sh && DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a bash install.sh && rm -f install.sh
+
 ```  
 
 登录x-ui
