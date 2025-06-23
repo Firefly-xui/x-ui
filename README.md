@@ -104,7 +104,7 @@ xray 状态: 运行
 # ubuntu安装x-ui，创建节点，并优化网络
 
  
-跟新以及安装防火墙放行端口
+更新以及安装防火墙放行端口
 ```
 sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt update && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt install -y ufw && echo "y" | sudo ufw enable && sudo ufw allow 22/tcp && sudo ufw allow 5000/tcp && sudo ufw allow 7000/tcp && sudo ufw status
 ```  
