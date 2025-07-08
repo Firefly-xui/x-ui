@@ -171,7 +171,8 @@ net.core.netdev_max_backlog
 
 ```  
 
-
+windows客户端
+-官方v2rayn [v2rayn](https://github.com/2dust/v2rayN/releases/download/7.12.7/v2rayN-windows-64-desktop.zip)
 
 # 致谢
 
