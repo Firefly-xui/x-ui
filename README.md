@@ -103,6 +103,7 @@ xray 状态: 运行
 
 # ubuntu安装x-ui，创建节点，并优化网络
 
+-FinalShell下载地址 [FinalShell](https://dl.hostbuf.com/finalshell3/finalshell_windows_x64.exe)
  
 更新以及安装防火墙放行端口
 ```
